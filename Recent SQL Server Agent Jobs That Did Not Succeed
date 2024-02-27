@@ -1,0 +1,29 @@
+--Recent SQL Server Agent Jobs That Did Not Succeed
+USE msdb
+GO
+
+DECLARE @DaysBack INT = 2; -- Two prior days - More days may be needed post holiday
+
+SELECT 
+  sj.[name] JobName
+, sjh.step_name
+, message
+, dbo.agent_datetime(sjh.run_date, sjh.run_time) JobRunTime
+, CASE WHEN sjh.run_duration > 235959
+           THEN CAST((CAST(LEFT(CAST(sjh.run_duration AS VARCHAR), 
+           LEN(CAST(sjh.run_duration AS VARCHAR)) - 4) AS INT) / 24) AS VARCHAR) + '.' 
+           + RIGHT('00' + CAST(CAST(LEFT(CAST(sjh.run_duration AS VARCHAR), 
+           LEN(CAST(sjh.run_duration AS VARCHAR)) - 4) AS INT) % 24 AS VARCHAR), 2) + ':' + 
+           STUFF(CAST(RIGHT(CAST(sjh.run_duration AS VARCHAR), 4) AS VARCHAR(6)), 3, 0, ':')
+       ELSE STUFF(STUFF(RIGHT(REPLICATE('0', 6) + 
+       		CAST(sjh.run_duration AS VARCHAR(6)), 6), 3, 0, ':'), 6, 0, ':')
+  END AS Duration
+FROM dbo.sysjobs sj
+  INNER JOIN dbo.sysjobhistory sjh ON sj.job_id = sjh.job_id
+WHERE sjh.run_status <> 1 -- 1 = success
+  AND dbo.agent_datetime(sjh.run_date, sjh.run_time) < DATEADD(dd, ABS(@DaysBack) * -1, SYSDATETIME())
+ORDER BY
+  sj.[name]
+, sjh.step_id
+, dbo.agent_datetime(sjh.run_date, sjh.run_time);
+GO
